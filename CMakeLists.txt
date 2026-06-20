@@ -1,25 +1,21 @@
 cmake_minimum_required(VERSION 3.18)
-project(RenderFusion LANGUAGES C CXX)
+project(DanmuGL LANGUAGES C CXX)
 
-# ===================== 关键修复：强制指定 STL 类型 =====================
 set(ANDROID_STL c++_shared)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# 编译优化与链接配置
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -fvisibility=hidden -ffunction-sections -fdata-sections -fexceptions -w")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2 -fvisibility=hidden -ffunction-sections -fdata-sections -w")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--gc-sections,--strip-all -s")
 
-# 屏蔽CMake弃用警告
 cmake_policy(SET CMP0169 OLD)
 cmake_policy(SET CMP0135 NEW)
 
 include(FetchContent)
 
-# ===================== 1. fmt库 =====================
 FetchContent_Declare(
     fmt
     GIT_REPOSITORY https://github.com/fmtlib/fmt.git
@@ -28,7 +24,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(fmt)
 
-# ===================== 2. nlohmann/json库 =====================
 FetchContent_Declare(
     nlohmann_json
     GIT_REPOSITORY https://github.com/nlohmann/json.git
@@ -37,7 +32,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
-# ===================== 2. preloader-android =====================
 FetchContent_Declare(
     preloader_android
     GIT_REPOSITORY https://github.com/LiteLDev/preloader-android.git
@@ -48,7 +42,6 @@ FetchContent_GetProperties(preloader_android)
 if(NOT preloader_android_POPULATED)
     FetchContent_Populate(preloader_android)
     
-    # 修复preloader的format依赖
     file(READ "${preloader_android_SOURCE_DIR}/src/pl/Logger.h" LOGGER_CONTENT)
     string(REPLACE "#include <format>" "#include <fmt/format.h>" LOGGER_CONTENT "${LOGGER_CONTENT}")
     string(REPLACE "std::vformat" "fmt::vformat" LOGGER_CONTENT "${LOGGER_CONTENT}")
@@ -59,26 +52,24 @@ if(NOT preloader_android_POPULATED)
 endif()
 target_link_libraries(preloader PUBLIC fmt::fmt nlohmann_json::nlohmann_json)
 
-# ===================== 项目配置 =====================
 target_include_directories(preloader PUBLIC
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/src/ImGui
     ${CMAKE_SOURCE_DIR}/src/ImGui/backends
+    ${CMAKE_SOURCE_DIR}/src/thirdparty
 )
 
+file(GLOB IMGUI_SOURCES src/ImGui/imgui*.cpp)
 set(SOURCES
     src/main.cpp
-    src/ImGui/imgui.cpp
-    src/ImGui/imgui_draw.cpp
-    src/ImGui/imgui_tables.cpp
-    src/ImGui/imgui_widgets.cpp
+    ${IMGUI_SOURCES}
     src/ImGui/backends/imgui_impl_opengl3.cpp
     src/ImGui/backends/imgui_impl_android.cpp
 )
 
-add_library(RenderFusion SHARED ${SOURCES})
+add_library(DanmuGL SHARED ${SOURCES})
 
-target_link_libraries(RenderFusion
+target_link_libraries(DanmuGL
     preloader
     fmt::fmt
     log
@@ -86,22 +77,22 @@ target_link_libraries(RenderFusion
     EGL
     GLESv3
     GLESv2
+    z
 )
 
-# ===================== 输出目录 =====================
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/output)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/output)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/output)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/output)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/output)
 
-set_target_properties(RenderFusion PROPERTIES
+set_target_properties(DanmuGL PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/output
-    LIBRARY_OUTPUT_NAME RenderFusion
+    LIBRARY_OUTPUT_NAME DanmuGL
 )
 
-add_custom_command(TARGET RenderFusion POST_BUILD
+add_custom_command(TARGET DanmuGL POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/output
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:RenderFusion> ${CMAKE_BINARY_DIR}/output/
-    COMMENT "Copying RenderFusion library to output directory"
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:DanmuGL> ${CMAKE_BINARY_DIR}/output/
+    COMMENT "Copying DanmuGL library to output directory"
 )
