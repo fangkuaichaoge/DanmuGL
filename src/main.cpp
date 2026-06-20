@@ -2169,9 +2169,12 @@ static inline float Scale(float v) {
 struct {
     ImVec2 pos = ImVec2(-1, -1);
     bool dragging = false;
-    ImVec2 dragOffset = ImVec2(-99999, -99999);
+    bool dragStarted = false;
+    ImVec2 dragOffset = ImVec2(0, 0);
+    ImVec2 dragStart = ImVec2(0, 0);
     float expandProgress = 0.0f;
     double lastClickTime = 0.0;
+    bool justClicked = false;
 } g_Island;
 
 static ImVec2 Lerp(const ImVec2& a, const ImVec2& b, float t) {
@@ -2252,126 +2255,71 @@ static void SetupStyle() {
     ImGuiStyle& s = ImGui::GetStyle();
     ImVec4* c = s.Colors;
 
-    // Optimized Dark Fluent Style Theme
-    // Window & Background
-    c[ImGuiCol_WindowBg]         = ImVec4(0.06f, 0.06f, 0.06f, 0.98f);
-    c[ImGuiCol_ChildBg]          = ImVec4(0.09f, 0.09f, 0.09f, 1.00f);
-    c[ImGuiCol_PopupBg]          = ImVec4(0.11f, 0.11f, 0.11f, 0.98f);
-
-    // Title Bar
-    c[ImGuiCol_TitleBg]          = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
-    c[ImGuiCol_TitleBgActive]    = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
-    c[ImGuiCol_TitleBgCollapsed] = ImVec4(0.08f, 0.08f, 0.08f, 0.80f);
-
-    // Frame Background
-    c[ImGuiCol_FrameBg]          = ImVec4(0.15f, 0.15f, 0.15f, 1.00f);
-    c[ImGuiCol_FrameBgHovered]   = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
-    c[ImGuiCol_FrameBgActive]    = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
-
-    // Buttons
-    c[ImGuiCol_Button]           = MD3Style::Primary;
-    c[ImGuiCol_ButtonHovered]    = MD3Style::PrimaryLight;
-    c[ImGuiCol_ButtonActive]     = MD3Style::PrimaryDark;
-
-    // Slider
-    c[ImGuiCol_SliderGrab]       = MD3Style::Primary;
-    c[ImGuiCol_SliderGrabActive] = MD3Style::PrimaryLight;
-
-    // Checkbox
-    c[ImGuiCol_CheckMark]        = MD3Style::Primary;
-
-    // Text
-    c[ImGuiCol_Text]             = ImVec4(0.98f, 0.98f, 0.98f, 1.00f);
-    c[ImGuiCol_TextDisabled]     = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
-    c[ImGuiCol_TextSelectedBg]   = ImVec4(MD3Style::Primary.x, MD3Style::Primary.y, MD3Style::Primary.z, 0.35f);
-
-    // Header
-    c[ImGuiCol_Header]           = ImVec4(MD3Style::Primary.x, MD3Style::Primary.y, MD3Style::Primary.z, 0.20f);
-    c[ImGuiCol_HeaderHovered]    = ImVec4(MD3Style::Primary.x, MD3Style::Primary.y, MD3Style::Primary.z, 0.30f);
-    c[ImGuiCol_HeaderActive]     = ImVec4(MD3Style::Primary.x, MD3Style::Primary.y, MD3Style::Primary.z, 0.45f);
-
-    // Tabs
-    c[ImGuiCol_Tab]              = ImVec4(0.18f, 0.18f, 0.18f, 1.00f);
-    c[ImGuiCol_TabHovered]       = ImVec4(MD3Style::Primary.x, MD3Style::Primary.y, MD3Style::Primary.z, 0.30f);
-    c[ImGuiCol_TabActive]        = MD3Style::Primary;
-    c[ImGuiCol_TabUnfocused]     = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
-    c[ImGuiCol_TabUnfocusedActive] = ImVec4(0.18f, 0.18f, 0.18f, 1.00f);
-
-    // Separator
-    c[ImGuiCol_Separator]        = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
-    c[ImGuiCol_SeparatorHovered] = MD3Style::Primary;
-    c[ImGuiCol_SeparatorActive]  = MD3Style::PrimaryLight;
-
-    // Border
-    c[ImGuiCol_Border]           = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
-    c[ImGuiCol_BorderShadow]     = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-
-    // Scrollbar
-    c[ImGuiCol_ScrollbarBg]      = ImVec4(0.08f, 0.08f, 0.08f, 0.60f);
-    c[ImGuiCol_ScrollbarGrab]    = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
-    c[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.40f, 0.40f, 0.40f, 1.00f);
+    c[ImGuiCol_Text]                 = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+    c[ImGuiCol_TextDisabled]         = ImVec4(0.50f, 0.50f, 0.50f, 1.0f);
+    c[ImGuiCol_WindowBg]             = ImVec4(0.10f, 0.10f, 0.13f, 0.98f);
+    c[ImGuiCol_ChildBg]              = ImVec4(0.09f, 0.09f, 0.11f, 0.0f);
+    c[ImGuiCol_PopupBg]              = ImVec4(0.10f, 0.10f, 0.13f, 0.98f);
+    c[ImGuiCol_Border]               = ImVec4(0.17f, 0.17f, 0.26f, 0.5f);
+    c[ImGuiCol_BorderShadow]         = ImVec4(0, 0, 0, 0);
+    c[ImGuiCol_FrameBg]              = ImVec4(0.14f, 0.14f, 0.19f, 1.0f);
+    c[ImGuiCol_FrameBgHovered]       = ImVec4(0.17f, 0.17f, 0.24f, 1.0f);
+    c[ImGuiCol_FrameBgActive]        = ImVec4(0.20f, 0.20f, 0.29f, 1.0f);
+    c[ImGuiCol_TitleBg]              = ImVec4(0.10f, 0.10f, 0.13f, 1.0f);
+    c[ImGuiCol_TitleBgActive]        = ImVec4(0.10f, 0.10f, 0.13f, 1.0f);
+    c[ImGuiCol_TitleBgCollapsed]     = ImVec4(0.10f, 0.10f, 0.13f, 0.8f);
+    c[ImGuiCol_Button]               = MD3Style::Primary;
+    c[ImGuiCol_ButtonHovered]        = MD3Style::PrimaryLight;
+    c[ImGuiCol_ButtonActive]         = MD3Style::PrimaryDark;
+    c[ImGuiCol_SliderGrab]           = MD3Style::Primary;
+    c[ImGuiCol_SliderGrabActive]     = MD3Style::PrimaryLight;
+    c[ImGuiCol_CheckMark]            = MD3Style::Primary;
+    c[ImGuiCol_Separator]            = ImVec4(0.17f, 0.17f, 0.26f, 0.5f);
+    c[ImGuiCol_Header]               = ImVec4(MD3Style::Primary.x, MD3Style::Primary.y, MD3Style::Primary.z, 0.2f);
+    c[ImGuiCol_HeaderHovered]        = ImVec4(MD3Style::Primary.x, MD3Style::Primary.y, MD3Style::Primary.z, 0.3f);
+    c[ImGuiCol_HeaderActive]         = ImVec4(MD3Style::Primary.x, MD3Style::Primary.y, MD3Style::Primary.z, 0.45f);
+    c[ImGuiCol_Tab]                  = ImVec4(0.14f, 0.14f, 0.19f, 1.0f);
+    c[ImGuiCol_TabHovered]           = ImVec4(MD3Style::Primary.x, MD3Style::Primary.y, MD3Style::Primary.z, 0.3f);
+    c[ImGuiCol_TabActive]            = MD3Style::Primary;
+    c[ImGuiCol_TabUnfocused]         = ImVec4(0.10f, 0.10f, 0.13f, 1.0f);
+    c[ImGuiCol_TabUnfocusedActive]   = ImVec4(0.14f, 0.14f, 0.19f, 1.0f);
+    c[ImGuiCol_TextSelectedBg]       = ImVec4(MD3Style::Primary.x, MD3Style::Primary.y, MD3Style::Primary.z, 0.35f);
+    c[ImGuiCol_ScrollbarBg]          = ImVec4(0.09f, 0.09f, 0.11f, 0.6f);
+    c[ImGuiCol_ScrollbarGrab]        = ImVec4(0.17f, 0.17f, 0.24f, 1.0f);
+    c[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.20f, 0.20f, 0.29f, 1.0f);
     c[ImGuiCol_ScrollbarGrabActive]  = MD3Style::Primary;
+    c[ImGuiCol_ModalWindowDimBg]     = ImVec4(0.0f, 0.0f, 0.0f, 0.7f);
+    c[ImGuiCol_ResizeGrip]           = ImVec4(MD3Style::Primary.x, MD3Style::Primary.y, MD3Style::Primary.z, 0.3f);
+    c[ImGuiCol_ResizeGripHovered]    = MD3Style::Primary;
+    c[ImGuiCol_ResizeGripActive]     = MD3Style::PrimaryLight;
 
-    // Table
-    c[ImGuiCol_TableHeaderBg]    = ImVec4(0.12f, 0.12f, 0.12f, 1.00f);
-    c[ImGuiCol_TableBorderStrong]= ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
-    c[ImGuiCol_TableBorderLight] = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
-    c[ImGuiCol_TableRowBg]       = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-    c[ImGuiCol_TableRowBgAlt]    = ImVec4(MD3Style::Primary.x, MD3Style::Primary.y, MD3Style::Primary.z, 0.06f);
-
-    // Navigation
-    c[ImGuiCol_NavHighlight]     = MD3Style::Primary;
-    c[ImGuiCol_NavWindowingHighlight] = ImVec4(1.0f, 1.0f, 1.0f, 0.70f);
-    c[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
-
-    // Modal Window Dim
-    c[ImGuiCol_ModalWindowDimBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.70f);
-
-    // Resize Grip
-    c[ImGuiCol_ResizeGrip]       = ImVec4(MD3Style::Primary.x, MD3Style::Primary.y, MD3Style::Primary.z, 0.30f);
-    c[ImGuiCol_ResizeGripHovered] = MD3Style::Primary;
-    c[ImGuiCol_ResizeGripActive]  = MD3Style::PrimaryLight;
-
-    // Plot
-    c[ImGuiCol_PlotLines]        = ImVec4(0.60f, 0.60f, 0.60f, 1.00f);
-    c[ImGuiCol_PlotLinesHovered] = MD3Style::Primary;
-    c[ImGuiCol_PlotHistogram]    = MD3Style::Primary;
-    c[ImGuiCol_PlotHistogramHovered] = MD3Style::PrimaryLight;
-
-    // Drag Drop
-    c[ImGuiCol_DragDropTarget]   = MD3Style::Secondary;
-
-    // Style Settings
-    s.WindowRounding    = Scale(14.0f);
-    s.ChildRounding     = Scale(10.0f);
-    s.FrameRounding     = Scale(8.0f);
+    s.WindowRounding    = Scale(16.0f);
+    s.ChildRounding     = Scale(12.0f);
+    s.FrameRounding     = Scale(10.0f);
     s.PopupRounding     = Scale(10.0f);
-    s.ScrollbarRounding = Scale(8.0f);
     s.GrabRounding      = Scale(8.0f);
-    s.TabRounding       = Scale(8.0f);
-    s.LogSliderDeadzone = Scale(4.0f);
-
-    s.WindowPadding     = ImVec2(Scale(16), Scale(16));
-    s.FramePadding      = ImVec2(Scale(12), Scale(8));
-    s.ItemSpacing       = ImVec2(Scale(12), Scale(8));
-    s.ItemInnerSpacing  = ImVec2(Scale(8), Scale(6));
-    s.IndentSpacing     = Scale(24.0f);
+    s.ScrollbarRounding = Scale(8.0f);
+    s.TabRounding       = Scale(10.0f);
+    s.WindowPadding     = ImVec2(Scale(18), Scale(18));
+    s.FramePadding      = ImVec2(Scale(16), Scale(14));
+    s.ItemSpacing       = ImVec2(Scale(12), Scale(12));
+    s.ItemInnerSpacing  = ImVec2(Scale(10), Scale(8));
+    s.ScrollbarSize     = Scale(12.0f);
+    s.GrabMinSize       = Scale(20.0f);
+    s.WindowBorderSize  = 0;
+    s.ChildBorderSize   = 0;
+    s.PopupBorderSize   = 0;
+    s.FrameBorderSize   = 0;
+    s.TabBorderSize     = 0;
+    s.IndentSpacing     = Scale(20.0f);
     s.CellPadding       = ImVec2(Scale(8), Scale(6));
 
-    s.WindowBorderSize  = 1.0f;
-    s.ChildBorderSize   = 0.0f;
-    s.PopupBorderSize   = 1.0f;
-    s.FrameBorderSize   = 0.0f;
-    s.TabBorderSize     = 0.0f;
-
-    s.ScrollbarSize     = Scale(14.0f);
-    s.WindowMinSize     = ImVec2(Scale(280), Scale(280));
-
-    s.WindowTitleAlign       = ImVec2(0.5f, 0.5f);
+    s.WindowMinSize     = ImVec2(Scale(280), Scale(200));
+    s.WindowTitleAlign  = ImVec2(0.5f, 0.5f);
     s.WindowMenuButtonPosition = ImGuiDir_None;
-    s.ColorButtonPosition    = ImGuiDir_Right;
-    s.ButtonTextAlign        = ImVec2(0.5f, 0.5f);
-    s.SelectableTextAlign    = ImVec2(0.0f, 0.5f);
+    s.ColorButtonPosition = ImGuiDir_Right;
+    s.ButtonTextAlign   = ImVec2(0.5f, 0.5f);
+    s.SelectableTextAlign = ImVec2(0.0f, 0.5f);
 
     s.AntiAliasedLines = true;
     s.AntiAliasedFill  = true;
@@ -2396,101 +2344,91 @@ static bool IsPointInIsland(float x, float y) {
     return IsPointInCircle(x, y, g_Island.pos, hitRadius);
 }
 
-// Draw Circular Floating Window Button (Draggable, Double-click to toggle)
+// Draw Circular Floating Window Button (Draggable, Single-click to toggle)
 static bool DrawDynamicIsland(bool* clicked) {
     ImGuiIO& io = ImGui::GetIO();
     ImDrawList* draw_list = ImGui::GetForegroundDrawList();
-    float dt = io.DeltaTime;
     double now = ImGui::GetTime();
 
     const float radius = Scale(28.0f);
     const float hitRadius = radius + Scale(12.0f);
+    const float dragThreshold = Scale(10.0f);
 
     if (g_Island.pos.x < 0) {
-        g_Island.pos = ImVec2(io.DisplaySize.x - radius - Scale(20.0f), Scale(60.0f));
+        g_Island.pos = ImVec2(io.DisplaySize.x - radius - Scale(20.0f), Scale(80.0f));
     }
-
-    float targetProgress = g_ShowUI ? 1.0f : 0.0f;
-    g_Island.expandProgress += (targetProgress - g_Island.expandProgress) * (1.0f - powf(0.0001f, dt));
-    float p = Clamp01(g_Island.expandProgress);
-    float ep = EaseOutBack(p);
 
     ImVec2 center = g_Island.pos;
     bool inCircle = (io.MousePos.x - center.x) * (io.MousePos.x - center.x) +
                     (io.MousePos.y - center.y) * (io.MousePos.y - center.y) <= hitRadius * hitRadius;
 
-    if (g_Island.dragging) {
-        if (io.MouseDown[0]) {
+    *clicked = false;
+
+    if (inCircle && io.MouseClicked[0] && !g_Island.dragging) {
+        g_Island.dragStart = io.MousePos;
+        g_Island.dragOffset = ImVec2(io.MousePos.x - center.x, io.MousePos.y - center.y);
+        g_Island.dragStarted = false;
+    }
+
+    if (io.MouseDown[0]) {
+        float dx = io.MousePos.x - g_Island.dragStart.x;
+        float dy = io.MousePos.y - g_Island.dragStart.y;
+        float dist = sqrtf(dx*dx + dy*dy);
+
+        if (!g_Island.dragStarted && dist > dragThreshold) {
+            g_Island.dragStarted = true;
+            g_Island.dragging = true;
+        }
+
+        if (g_Island.dragging) {
             g_Island.pos = ImVec2(io.MousePos.x - g_Island.dragOffset.x, io.MousePos.y - g_Island.dragOffset.y);
             if (g_Island.pos.x < radius) g_Island.pos.x = radius;
             if (g_Island.pos.x > io.DisplaySize.x - radius) g_Island.pos.x = io.DisplaySize.x - radius;
             if (g_Island.pos.y < radius) g_Island.pos.y = radius;
             if (g_Island.pos.y > io.DisplaySize.y - radius) g_Island.pos.y = io.DisplaySize.y - radius;
-        } else {
+        }
+    } else {
+        if (g_Island.dragging) {
             g_Island.dragging = false;
-        }
-    } else if (inCircle && io.MouseClicked[0]) {
-        g_Island.dragOffset = ImVec2(io.MousePos.x - center.x, io.MousePos.y - center.y);
-        if (now - g_Island.lastClickTime < 0.35) {
+            g_Island.dragStarted = false;
+        } else if (inCircle && io.MouseReleased[0] && !g_Island.dragStarted) {
             *clicked = true;
-            g_Island.lastClickTime = 0.0;
-        } else {
-            g_Island.lastClickTime = now;
         }
-    }
-
-    if (!g_Island.dragging && io.MouseReleased[0] &&
-        (io.MousePos.x - center.x) * (io.MousePos.x - center.x) +
-        (io.MousePos.y - center.y) * (io.MousePos.y - center.y) <= hitRadius * hitRadius &&
-        g_Island.dragOffset.x != -99999) {
-        float dist = sqrtf(g_Island.dragOffset.x * g_Island.dragOffset.x + g_Island.dragOffset.y * g_Island.dragOffset.y);
-        if (dist < Scale(5.0f)) {
-        }
-        g_Island.dragOffset = ImVec2(-99999, -99999);
-    }
-
-    if (!g_Island.dragging && inCircle && io.MouseDown[0] &&
-        (io.MousePos.x - center.x) * (io.MousePos.x - center.x) +
-        (io.MousePos.y - center.y) * (io.MousePos.y - center.y) > Scale(8.0f) * Scale(8.0f)) {
-        g_Island.dragging = true;
     }
 
     ImU32 colIdle    = ImGui::ColorConvertFloat4ToU32(MD3Style::IslandBgColor);
     ImU32 colHover   = ImGui::ColorConvertFloat4ToU32(ImVec4(
-        MD3Style::IslandBgColor.x * 1.15f,
-        MD3Style::IslandBgColor.y * 1.15f,
-        MD3Style::IslandBgColor.z * 1.15f,
-        1.0f
+        MD3Style::IslandBgColor.x * 1.1f,
+        MD3Style::IslandBgColor.y * 1.1f,
+        MD3Style::IslandBgColor.z * 1.1f,
+        0.95f
     ));
     ImU32 colPress   = ImGui::ColorConvertFloat4ToU32(ImVec4(
         MD3Style::IslandBgColor.x * 0.85f,
         MD3Style::IslandBgColor.y * 0.85f,
         MD3Style::IslandBgColor.z * 0.85f,
-        1.0f
+        0.95f
     ));
 
     ImU32 bgCol;
     float rAdd = 0.0f;
-    if (g_Island.dragging) {
+    bool pressed = inCircle && io.MouseDown[0] && !g_Island.dragStarted;
+    if (g_Island.dragging || pressed) {
         bgCol = colPress;
-        rAdd = Scale(4.0f);
+        rAdd = Scale(2.0f);
     } else if (inCircle) {
         bgCol = colHover;
-        rAdd = Scale(2.0f);
+        rAdd = Scale(1.0f);
     } else {
         bgCol = colIdle;
     }
 
-    draw_list->AddCircleFilled(ImVec2(center.x, center.y + Scale(4.0f)), radius + rAdd, IM_COL32(0, 0, 0, 60), 48);
+    draw_list->AddCircleFilled(ImVec2(center.x, center.y + Scale(4.0f)), radius + rAdd, IM_COL32(0, 0, 0, 80), 48);
 
     draw_list->AddCircleFilled(center, radius + rAdd, bgCol, 48);
 
-    if (inCircle && !g_Island.dragging) {
-        float t = fmodf((float)now * 2.0f, 1.0f);
-        draw_list->AddCircle(center, radius + Scale(4.0f) + t * Scale(8.0f),
-            IM_COL32((int)(MD3Style::Primary.x * 255), (int)(MD3Style::Primary.y * 255), (int)(MD3Style::Primary.z * 255), (int)((1.0f - t) * 80)),
-            48, Scale(2.0f));
-    }
+    ImU32 borderCol = g_ShowUI ? IM_COL32((int)(MD3Style::Primary.x*255), (int)(MD3Style::Primary.y*255), (int)(MD3Style::Primary.z*255), 200) : IM_COL32(255,255,255,60);
+    draw_list->AddCircle(center, radius + rAdd, borderCol, 48, Scale(2.0f));
 
     if (g_FontIsland) {
         const char* label = "RF";
@@ -2501,11 +2439,7 @@ static bool DrawDynamicIsland(bool* clicked) {
             ImVec2(center.x - ts.x * 0.5f, center.y - ts.y * 0.5f), textCol, label);
     }
 
-    if (*clicked) {
-        return true;
-    }
-
-    return false;
+    return *clicked;
 }
 
 static void DrawUI() {
@@ -2513,7 +2447,7 @@ static void DrawUI() {
     ImGuiIO& io = ImGui::GetIO();
 
     // ============================================
-    // Circular Floating Button (Always visible, double-click to toggle)
+    // Circular Floating Button (Always visible, single-click to toggle)
     // ============================================
     bool clicked = false;
     DrawDynamicIsland(&clicked);
@@ -2769,47 +2703,6 @@ static void DrawUI() {
         if (ImGui::BeginTabItem("Theme")) {
             ImGui::Spacing();
             
-            // Background Theme
-            ImGui::TextColored(MD3Style::OnSurfaceVariant, "Background Theme");
-            ImGui::Spacing();
-            
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 16.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(16, 8));
-            
-            const char* bg_themes[] = {"Dark", "Light", "AMOLED"};
-            for (int i = 0; i < 3; i++) {
-                bool selected = (MD3Style::CurrentBackgroundTheme == i);
-                ImVec2 textSize = ImGui::CalcTextSize(bg_themes[i]);
-                float btnWidth = textSize.x + 32;
-                ImGui::PushStyleColor(ImGuiCol_Button, selected ? MD3Style::Primary : MD3Style::SurfaceContainerHigh);
-                if (ImGui::Button(bg_themes[i], ImVec2(btnWidth, 32))) {
-                    MD3Style::ApplyBackgroundTheme(i);
-                    SetupStyle();
-                    Config::SaveConfig();
-                }
-                ImGui::PopStyleColor();
-                if (i < 2) ImGui::SameLine();
-            }
-            ImGui::PopStyleVar(2);
-            
-            ImGui::Spacing();
-            
-            // Custom Background Tint
-            ImGui::TextColored(MD3Style::OnSurfaceVariant, "Custom Background Tint");
-            ImGui::PushItemWidth(-1);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-            if (ImGui::ColorEdit4("##BgTint", (float*)&MD3Style::CustomBgTint, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar)) {
-                MD3Style::ApplyBackgroundTheme(MD3Style::CurrentBackgroundTheme);
-                SetupStyle();
-                Config::SaveConfig();
-            }
-            ImGui::PopStyleVar();
-            ImGui::PopItemWidth();
-            
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            
             // Accent Colors
             ImGui::TextColored(MD3Style::OnSurfaceVariant, "Accent Color");
             ImGui::Spacing();
@@ -2920,9 +2813,9 @@ static void Setup() {
     io.IniFilename = nullptr;
     io.LogFilename = nullptr;
 
-    g_DpiScale = (float)g_Height / 854.0f;
-    if (g_DpiScale < 0.75f) g_DpiScale = 0.75f;
-    if (g_DpiScale > 2.0f) g_DpiScale = 2.0f;
+    g_DpiScale = (float)g_Width / 1080.0f;
+    if (g_DpiScale < 1.0f) g_DpiScale = 1.0f;
+    if (g_DpiScale > 3.0f) g_DpiScale = 3.0f;
     g_FontScale = g_DpiScale;
 
     io.Fonts->Clear();
@@ -2933,8 +2826,8 @@ static void Setup() {
 
     g_FontIsland   = io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(), (int)inter_medium.size(), Scale(22.0f), &cfg, io.Fonts->GetGlyphRangesDefault());
     g_FontSubtitle = io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(), (int)inter_medium.size(), Scale(15.0f), &cfg, io.Fonts->GetGlyphRangesDefault());
-    g_FontBody     = io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(), (int)inter_medium.size(), Scale(17.0f), &cfg, io.Fonts->GetGlyphRangesDefault());
-    g_FontButton   = io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(), (int)inter_medium.size(), Scale(19.0f), &cfg, io.Fonts->GetGlyphRangesDefault());
+    g_FontBody     = io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(), (int)inter_medium.size(), Scale(18.0f), &cfg, io.Fonts->GetGlyphRangesDefault());
+    g_FontButton   = io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(), (int)inter_medium.size(), Scale(20.0f), &cfg, io.Fonts->GetGlyphRangesDefault());
     g_UIFont       = g_FontBody;
     if (g_FontBody) io.FontDefault = g_FontBody;
 
