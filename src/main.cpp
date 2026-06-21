@@ -708,7 +708,11 @@ void* Worker(void*){
         std::vector<unsigned char> jpg;if(!Capture::GetLatestFrame(jpg)||jpg.empty()){LOGW("No frame captured yet");continue;}
         LOGI("Sending request: %d bytes JPEG", (int)jpg.size());
         std::string b64=Base64Encode(jpg.data(),jpg.size());
-        nlohmann::json req;req["model"]=Config::model_name;req["max_tokens"]=Config::ai_max_tokens;req["temperature"]=(double)Config::ai_temperature;
+        nlohmann::json req;req["model"]=Config::model_name;req["max_tokens"]=Config::ai_max_tokens;
+        double temp_val = (double)Config::ai_temperature;
+        if(temp_val < 0.0) temp_val = 0.0; if(temp_val > 1.0) temp_val = 1.0;
+        temp_val = floor(temp_val * 10.0 + 0.5) / 10.0;
+        req["temperature"]=temp_val;
         req["stream"]=false;
         nlohmann::json msgs=nlohmann::json::array();
         nlohmann::json sys;sys["role"]="system";
