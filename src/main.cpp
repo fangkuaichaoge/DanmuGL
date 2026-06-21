@@ -1,4 +1,4 @@
-#include <jni.h>
+﻿#include <jni.h>
 #include <android/input.h>
 #include <android/log.h>
 #include <EGL/egl.h>
@@ -29,6 +29,7 @@
 #include "ImGui/imgui.h"
 #include "ImGui/backends/imgui_impl_opengl3.h"
 #include "ImGui/backends/imgui_impl_android.h"
+#include "fonts_data.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -242,41 +243,41 @@ static void SetupStyle(){
 }
 
 static bool InCircle(float x,float y,const ImVec2&c,float r){float dx=x-c.x,dy=y-c.y;return dx*dx+dy*dy<=r*r;}
-static bool InIsland(float x,float y){if(!g_Init||g_ShowUI||g_Isl.pos.x<0)return false;return InCircle(x,y,g_Isl.pos,Scale(44));}
+static bool InIsland(float x,float y){if(!g_Init||g_ShowUI||g_Isl.pos.x<0)return false;return InCircle(x,y,g_Isl.pos,Scale(56));}
 
 static void DrawConfigWin(){
-    ImGui::SetNextWindowSize(ImVec2(Scale(480),Scale(600)),ImGuiCond_FirstUseEver);ImGuiIO&io=ImGui::GetIO();
+    ImGui::SetNextWindowSize(ImVec2(Scale(520),Scale(680)),ImGuiCond_FirstUseEver);ImGuiIO&io=ImGui::GetIO();
     ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x*0.5f,io.DisplaySize.y*0.5f),ImGuiCond_FirstUseEver,ImVec2(0.5f,0.5f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(20,20));ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,20.0f);
-    bool open=true;ImGui::Begin("DanmuGL 设置",&open,ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoCollapse);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(Scale(24),Scale(24)));ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,Scale(20));
+    bool open=true;ImGui::Begin("DanmuGL Settings",&open,ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoCollapse);
     if(!open)g_ShowUI=false;
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,8.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,Scale(10));
     static char b1[512]={0},b2[512]={0},b3[128]={0},b4[512]={0};
     strncpy(b1,Config::api_key.c_str(),sizeof(b1)-1);b1[sizeof(b1)-1]=0;
-    ImGui::TextColored(Primary,"API 配置");ImGui::Separator();ImGui::Spacing();
+    ImGui::TextColored(Primary,"API Configuration");ImGui::Separator();ImGui::Spacing();
     ImGui::Text("API Key");if(ImGui::InputText("##ak",b1,sizeof(b1)))Config::api_key=b1;ImGui::Spacing();
     strncpy(b2,Config::api_base.c_str(),sizeof(b2)-1);b2[sizeof(b2)-1]=0;
-    ImGui::Text("API Base URL (建议 HTTP)");if(ImGui::InputText("##ab",b2,sizeof(b2)))Config::api_base=b2;ImGui::Spacing();
+    ImGui::Text("API Base URL (HTTP recommended)");if(ImGui::InputText("##ab",b2,sizeof(b2)))Config::api_base=b2;ImGui::Spacing();
     strncpy(b3,Config::model_name.c_str(),sizeof(b3)-1);b3[sizeof(b3)-1]=0;
-    ImGui::Text("模型名称");if(ImGui::InputText("##md",b3,sizeof(b3)))Config::model_name=b3;ImGui::Spacing();
+    ImGui::Text("Model Name");if(ImGui::InputText("##md",b3,sizeof(b3)))Config::model_name=b3;ImGui::Spacing();
     strncpy(b4,Config::font_path.c_str(),sizeof(b4)-1);b4[sizeof(b4)-1]=0;
-    ImGui::Text("字体路径 (TTF)");if(ImGui::InputText("##fp",b4,sizeof(b4)))Config::font_path=b4;
+    ImGui::Text("Chinese Font Path (TTF)");if(ImGui::InputText("##fp",b4,sizeof(b4)))Config::font_path=b4;
     if(!g_FontMsg.empty())ImGui::TextColored(ImVec4(1,0.5f,0.5f,1),"%s",g_FontMsg.c_str());
     ImGui::Spacing();ImGui::Separator();ImGui::Spacing();
-    ImGui::TextColored(Primary,"弹幕设置");ImGui::Separator();ImGui::Spacing();
-    ImGui::SliderInt("捕获间隔 (秒)",&Config::capture_interval,1,30);ImGui::Spacing();
-    ImGui::SliderInt("最大弹幕数量",&Config::max_danmu_count,10,200);ImGui::Spacing();
-    ImGui::SliderFloat("弹幕速度",&Config::danmu_speed,50,400,"%.0f");ImGui::Spacing();
+    ImGui::TextColored(Primary,"Danmaku Settings");ImGui::Separator();ImGui::Spacing();
+    ImGui::SliderInt("Capture Interval (sec)",&Config::capture_interval,1,30);ImGui::Spacing();
+    ImGui::SliderInt("Max Danmaku Count",&Config::max_danmu_count,10,200);ImGui::Spacing();
+    ImGui::SliderFloat("Danmaku Speed",&Config::danmu_speed,50,400,"%.0f");ImGui::Spacing();
     ImGui::Separator();ImGui::Spacing();
-    ImGui::TextColored(ImVec4(1,0.8f,0.3f,1),"提示: HTTPS 暂不直接支持，请配置 HTTP 代理或端点");ImGui::Spacing();
-    if(ImGui::Button("保存配置",ImVec2(-1,Scale(48))))Config::SaveConfig();ImGui::Spacing();
+    ImGui::TextColored(ImVec4(1,0.8f,0.3f,1),"Note: HTTPS not supported, use HTTP proxy/endpoint");ImGui::Spacing();
+    if(ImGui::Button("Save Config",ImVec2(-1,Scale(56))))Config::SaveConfig();ImGui::Spacing();
     if(Config::running){
         ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0.8f,0.3f,0.3f,1));
-        if(ImGui::Button("停止 AI 弹幕",ImVec2(-1,Scale(48)))){Config::running=false;AIClient::Stop();Config::SaveConfig();}
+        if(ImGui::Button("Stop AI Danmaku",ImVec2(-1,Scale(56)))){Config::running=false;AIClient::Stop();Config::SaveConfig();}
         ImGui::PopStyleColor();
     }else{
         ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0.3f,0.8f,0.4f,1));
-        if(ImGui::Button("开始 AI 弹幕",ImVec2(-1,Scale(48)))){Config::running=true;AIClient::Start();Config::SaveConfig();}
+        if(ImGui::Button("Start AI Danmaku",ImVec2(-1,Scale(56)))){Config::running=true;AIClient::Start();Config::SaveConfig();}
         ImGui::PopStyleColor();
     }
     ImGui::PopStyleVar();ImGui::End();ImGui::PopStyleVar(2);
@@ -284,8 +285,8 @@ static void DrawConfigWin(){
 
 static bool DrawIsland(bool* clicked){
     ImGuiIO&io=ImGui::GetIO();ImDrawList*dl=ImGui::GetForegroundDrawList();
-    float r=Scale(28),hr=r+Scale(16),dr=Scale(8);
-    if(g_Isl.pos.x<0)g_Isl.pos=ImVec2(io.DisplaySize.x-r-Scale(30),Scale(100));
+    float r=Scale(36),hr=r+Scale(20),dr=Scale(10);
+    if(g_Isl.pos.x<0)g_Isl.pos=ImVec2(io.DisplaySize.x-r-Scale(40),Scale(120));
     ImVec2 c=g_Isl.pos;bool inC=InCircle(io.MousePos.x,io.MousePos.y,c,hr);*clicked=false;
     if(!g_ShowUI){
         if(inC&&io.MouseClicked[0]&&!g_Isl.drag){g_Isl.dragSt=io.MousePos;g_Isl.dragOff=ImVec2(io.MousePos.x-c.x,io.MousePos.y-c.y);g_Isl.dragS=false;}
@@ -299,12 +300,12 @@ static bool DrawIsland(bool* clicked){
     }else{g_Isl.drag=false;g_Isl.dragS=false;g_Isl.dragSt=ImVec2(-1,-1);}
     ImU32 idle=ImGui::ColorConvertFloat4ToU32(Primary),hov=ImGui::ColorConvertFloat4ToU32(PriL),pres=ImGui::ColorConvertFloat4ToU32(PriD);
     ImU32 bg;float ra=0;bool pr=inC&&io.MouseDown[0]&&!g_Isl.dragS&&!g_ShowUI;
-    if(g_Isl.drag||pr){bg=pres;ra=Scale(3);}else if(inC&&!g_ShowUI){bg=hov;ra=Scale(2);}else bg=idle;
-    dl->AddCircleFilled(ImVec2(c.x,c.y+Scale(4)),r+ra,IM_COL32(0,0,0,100),48);
+    if(g_Isl.drag||pr){bg=pres;ra=Scale(4);}else if(inC&&!g_ShowUI){bg=hov;ra=Scale(3);}else bg=idle;
+    dl->AddCircleFilled(ImVec2(c.x,c.y+Scale(6)),r+ra,IM_COL32(0,0,0,100),48);
     dl->AddCircleFilled(c,r+ra,bg,48);dl->AddCircle(c,r+ra,IM_COL32(255,255,255,80),48,Scale(2));
-    if(g_FontIsland){const char*l="弹";ImVec2 ts=g_FontIsland->CalcTextSizeA(g_FontIsland->FontSize,FLT_MAX,0,l);
+    if(g_FontIsland){const char*l="AI";ImVec2 ts=g_FontIsland->CalcTextSizeA(g_FontIsland->FontSize,FLT_MAX,0,l);
     dl->AddText(g_FontIsland,g_FontIsland->FontSize,ImVec2(c.x-ts.x*0.5f,c.y-ts.y*0.5f),IM_COL32(255,255,255,255),l);}
-    if(Config::running)dl->AddCircleFilled(ImVec2(c.x+r*0.6f,c.y-r*0.6f),Scale(6),IM_COL32(80,255,80,255),16);
+    if(Config::running)dl->AddCircleFilled(ImVec2(c.x+r*0.6f,c.y-r*0.6f),Scale(8),IM_COL32(80,255,80,255),16);
     return *clicked;
 }
 
@@ -323,21 +324,23 @@ static void Setup(){
     if(g_Init||g_W<=0||g_H<=0)return;
     LOGI("DanmuGL setup...");ImGui::CreateContext();ImGuiIO&io=ImGui::GetIO();
     io.IniFilename=nullptr;io.LogFilename=nullptr;
-    g_Dpi=(float)g_H/1080.0f;if(g_Dpi<0.85f)g_Dpi=0.85f;if(g_Dpi>2.5f)g_Dpi=2.5f;
+    g_Dpi=(float)g_H/900.0f;if(g_Dpi<1.0f)g_Dpi=1.0f;if(g_Dpi>2.5f)g_Dpi=2.5f;
     io.Fonts->Clear();ImFontConfig cfg;cfg.FontDataOwnedByAtlas=false;cfg.OversampleH=cfg.OversampleV=2;cfg.PixelSnapH=true;
-    g_FontIsland=io.Fonts->AddFontDefault();g_UIFont=io.Fonts->AddFontDefault();g_DanmuFont=io.Fonts->AddFontDefault();
+    g_FontIsland=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(32),&cfg,io.Fonts->GetGlyphRangesDefault());
+    g_UIFont=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(26),&cfg,io.Fonts->GetGlyphRangesDefault());
+    g_DanmuFont=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(32),&cfg,io.Fonts->GetGlyphRangesDefault());
     const ImWchar* ranges=io.Fonts->GetGlyphRangesChineseFull();
     if(!Config::font_path.empty()){
-        ImFont*fi=io.Fonts->AddFontFromFileTTF(Config::font_path.c_str(),Scale(22),&cfg,ranges);
-        ImFont*fu=io.Fonts->AddFontFromFileTTF(Config::font_path.c_str(),Scale(20),&cfg,ranges);
-        ImFont*fd=io.Fonts->AddFontFromFileTTF(Config::font_path.c_str(),Scale(26),&cfg,ranges);
+        ImFont*fi=io.Fonts->AddFontFromFileTTF(Config::font_path.c_str(),Scale(32),&cfg,ranges);
+        ImFont*fu=io.Fonts->AddFontFromFileTTF(Config::font_path.c_str(),Scale(26),&cfg,ranges);
+        ImFont*fd=io.Fonts->AddFontFromFileTTF(Config::font_path.c_str(),Scale(32),&cfg,ranges);
         if(fi&&fu&&fd){g_FontIsland=fi;g_UIFont=fu;g_DanmuFont=fd;g_FontMsg="";}
-        else{g_FontMsg="字体加载失败，使用默认字体";io.Fonts->Clear();g_FontIsland=io.Fonts->AddFontDefault();g_UIFont=io.Fonts->AddFontDefault();g_DanmuFont=io.Fonts->AddFontDefault();}
-    }else{g_FontMsg="未配置字体，中文可能无法显示";}
+        else{g_FontMsg="Font load failed, using built-in font";}
+    }else{g_FontMsg="No Chinese font configured, Chinese danmaku may not display";}
     if(g_UIFont)io.FontDefault=g_UIFont;
     ImGui_ImplAndroid_Init(nullptr);ImGui_ImplOpenGL3_Init("#version 300 es");
     SetupStyle();g_Init=true;g_LastT=ImGui::GetTime();
-    LOGI("DanmuGL setup complete");
+    LOGI("DanmuGL setup complete, DPI: %.2f", g_Dpi);
 }
 
 static void RenderUI(){
