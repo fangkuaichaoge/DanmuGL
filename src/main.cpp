@@ -140,7 +140,7 @@ struct Island{ImVec2 pos;bool drag,dragS;ImVec2 dragOff,dragSt;}g_Isl={ImVec2(-1
 namespace Config {
 const char* CONFIG_PATH = "/storage/emulated/0/games/DanmuGL/config.json";
 std::string api_key="",api_base="https://api.siliconflow.cn/v1/chat/completions",model_name="Qwen/Qwen2.5-VL-7B-Instruct",font_path="";
-int capture_interval=3,max_danmu_count=80,danmu_per_request=8; float danmu_speed=200.0f,danmu_font_size=26.0f,danmu_opacity=1.0f; int prompt_lang=0, persona=0; bool running=false;
+int capture_interval=3,max_danmu_count=80,danmu_per_request=8,ai_max_tokens=200; float danmu_speed=200.0f,danmu_font_size=26.0f,danmu_opacity=1.0f,ai_temperature=0.6f; int prompt_lang=0, persona=0; bool running=false;
 void EnsureConfigDir(){system("mkdir -p /storage/emulated/0/games/DanmuGL");}
 bool LoadConfig(){
     std::ifstream f(CONFIG_PATH); if(!f.is_open())return false;
@@ -155,6 +155,8 @@ bool LoadConfig(){
     if(j.contains("danmu_speed"))danmu_speed=j["danmu_speed"];
     if(j.contains("danmu_font_size"))danmu_font_size=j["danmu_font_size"];
     if(j.contains("danmu_opacity"))danmu_opacity=j["danmu_opacity"];
+    if(j.contains("ai_temperature"))ai_temperature=j["ai_temperature"];
+    if(j.contains("ai_max_tokens"))ai_max_tokens=j["ai_max_tokens"];
     if(j.contains("prompt_lang"))prompt_lang=j["prompt_lang"];
     if(j.contains("persona"))persona=j["persona"];
     if(j.contains("running"))running=j["running"];
@@ -164,7 +166,9 @@ bool SaveConfig(){
     EnsureConfigDir(); nlohmann::json j;
     j["api_key"]=api_key;j["api_base"]=api_base;j["model_name"]=model_name;j["font_path"]=font_path;
     j["capture_interval"]=capture_interval;j["max_danmu_count"]=max_danmu_count;j["danmu_per_request"]=danmu_per_request;
-    j["danmu_speed"]=danmu_speed;j["danmu_font_size"]=danmu_font_size;j["danmu_opacity"]=danmu_opacity;j["prompt_lang"]=prompt_lang;j["persona"]=persona;j["running"]=running;
+    j["danmu_speed"]=danmu_speed;j["danmu_font_size"]=danmu_font_size;j["danmu_opacity"]=danmu_opacity;
+    j["ai_temperature"]=ai_temperature;j["ai_max_tokens"]=ai_max_tokens;
+    j["prompt_lang"]=prompt_lang;j["persona"]=persona;j["running"]=running;
     std::ofstream f(CONFIG_PATH); if(!f.is_open())return false; f<<j.dump(4); f.close(); return true;
 }
 }
@@ -704,7 +708,7 @@ void* Worker(void*){
         std::vector<unsigned char> jpg;if(!Capture::GetLatestFrame(jpg)||jpg.empty()){LOGW("No frame captured yet");continue;}
         LOGI("Sending request: %d bytes JPEG", (int)jpg.size());
         std::string b64=Base64Encode(jpg.data(),jpg.size());
-        nlohmann::json req;req["model"]=Config::model_name;req["max_tokens"]=800;req["temperature"]=0.9;
+        nlohmann::json req;req["model"]=Config::model_name;req["max_tokens"]=Config::ai_max_tokens;req["temperature"]=(double)Config::ai_temperature;
         req["stream"]=false;
         nlohmann::json msgs=nlohmann::json::array();
         nlohmann::json sys;sys["role"]="system";
@@ -853,6 +857,10 @@ static void DrawConfigWin(){
     ImGui::SliderFloat("Danmaku Speed",&Config::danmu_speed,80,400,"%.0f");ImGui::Spacing();
     ImGui::SliderFloat("Danmaku Font Size",&Config::danmu_font_size,16,48,"%.0f px");ImGui::Spacing();
     ImGui::SliderFloat("Danmaku Opacity",&Config::danmu_opacity,0.1f,1.0f,"%.2f");ImGui::Spacing();
+    ImGui::Separator();ImGui::Spacing();
+    ImGui::Text("AI Settings");ImGui::Spacing();
+    ImGui::SliderFloat("AI Temperature",&Config::ai_temperature,0.0f,1.0f,"%.2f");ImGui::Spacing();
+    ImGui::SliderInt("AI Max Tokens",&Config::ai_max_tokens,80,800);ImGui::Spacing();
     ImGui::Separator();ImGui::Spacing();
     if(!g_Testing){
         bool can_test=!Config::api_base.empty();
