@@ -139,8 +139,8 @@ struct Island{ImVec2 pos;bool drag,dragS;ImVec2 dragOff,dragSt;}g_Isl={ImVec2(-1
 
 namespace Config {
 const char* CONFIG_PATH = "/storage/emulated/0/games/DanmuGL/config.json";
-std::string api_key="",api_base="http://localhost:8000/v1/chat/completions",model_name="gpt-4-vision-preview",font_path="";
-int capture_interval=5,max_danmu_count=50; float danmu_speed=150.0f; bool running=false;
+std::string api_key="",api_base="https://api.siliconflow.cn/v1/chat/completions",model_name="Qwen/Qwen2.5-VL-7B-Instruct",font_path="";
+int capture_interval=4,max_danmu_count=80,danmu_per_request=4; float danmu_speed=180.0f,danmu_font_size=26.0f; int prompt_lang=0; bool running=false;
 void EnsureConfigDir(){system("mkdir -p /storage/emulated/0/games/DanmuGL");}
 bool LoadConfig(){
     std::ifstream f(CONFIG_PATH); if(!f.is_open())return false;
@@ -151,14 +151,18 @@ bool LoadConfig(){
     if(j.contains("font_path"))font_path=j["font_path"].get<std::string>();
     if(j.contains("capture_interval"))capture_interval=j["capture_interval"];
     if(j.contains("max_danmu_count"))max_danmu_count=j["max_danmu_count"];
+    if(j.contains("danmu_per_request"))danmu_per_request=j["danmu_per_request"];
     if(j.contains("danmu_speed"))danmu_speed=j["danmu_speed"];
+    if(j.contains("danmu_font_size"))danmu_font_size=j["danmu_font_size"];
+    if(j.contains("prompt_lang"))prompt_lang=j["prompt_lang"];
     if(j.contains("running"))running=j["running"];
     return true;
 }
 bool SaveConfig(){
     EnsureConfigDir(); nlohmann::json j;
     j["api_key"]=api_key;j["api_base"]=api_base;j["model_name"]=model_name;j["font_path"]=font_path;
-    j["capture_interval"]=capture_interval;j["max_danmu_count"]=max_danmu_count;j["danmu_speed"]=danmu_speed;j["running"]=running;
+    j["capture_interval"]=capture_interval;j["max_danmu_count"]=max_danmu_count;j["danmu_per_request"]=danmu_per_request;
+    j["danmu_speed"]=danmu_speed;j["danmu_font_size"]=danmu_font_size;j["prompt_lang"]=prompt_lang;j["running"]=running;
     std::ofstream f(CONFIG_PATH); if(!f.is_open())return false; f<<j.dump(4); f.close(); return true;
 }
 }
@@ -169,31 +173,35 @@ std::vector<Item> list; std::mutex mtx;
 ImU32 cols[]={IM_COL32(255,255,255,255),IM_COL32(255,220,100,255),IM_COL32(100,255,200,255),IM_COL32(255,150,180,255),IM_COL32(150,200,255,255),IM_COL32(255,255,100,255),IM_COL32(200,255,150,255)};
 int cc=7;
 void Add(const std::string& t){
-    if(t.empty())return;Item it;it.text=t;it.speed=Config::danmu_speed+(float)(rand()%100-50);it.color=cols[rand()%cc];it.x=-9999;it.y=0;it.w=0;it.h=0;
+    if(t.empty())return;Item it;it.text=t;it.speed=Config::danmu_speed+(float)(rand()%120-60);it.color=cols[rand()%cc];it.x=-9999;it.y=0;it.w=0;it.h=0;
     std::lock_guard<std::mutex> lk(mtx);
     if(list.size()>=(size_t)Config::max_danmu_count)list.erase(list.begin());
     list.push_back(it);
 }
 void Update(float dt,int sw,int sh,ImFont* f){
-    std::lock_guard<std::mutex> lk(mtx); ImFont* rf=f?f:ImGui::GetFont(); float fs=rf->FontSize;
-    int max_lines=(int)((sh-Scale(250))/(fs*1.6f));if(max_lines<1)max_lines=8;
+    std::lock_guard<std::mutex> lk(mtx); ImFont* rf=f?f:ImGui::GetFont();
+    float fs=Scale(Config::danmu_font_size);
+    if(rf!=ImGui::GetFont())fs=Config::danmu_font_size*Scale(1.0f);
+    int max_lines=(int)((sh-Scale(280))/(fs*1.5f));if(max_lines<1)max_lines=10;
     for(auto it=list.begin();it!=list.end();){
         Item& d=*it;
         ImVec2 ts=rf->CalcTextSizeA(fs,FLT_MAX,0,d.text.c_str());
         d.w=ts.x;d.h=ts.y;
         if(d.x<-9000){
-            d.x=(float)sw+10;
-            d.y=Scale(120)+(rand()%max_lines)*fs*1.6f;
+            d.x=(float)sw+Scale(20);
+            d.y=Scale(150)+(rand()%max_lines)*fs*1.5f;
         }
-        d.x-=d.speed*dt;
-        if(d.x+d.w<-10)it=list.erase(it);else ++it;
+        d.x-=d.speed*dt*g_Dpi;
+        if(d.x+d.w<-Scale(20))it=list.erase(it);else ++it;
     }
 }
 void Render(ImDrawList* dl,ImFont* f){
-    std::lock_guard<std::mutex> lk(mtx); ImFont* rf=f?f:ImGui::GetFont(); float fs=rf->FontSize;
+    std::lock_guard<std::mutex> lk(mtx); ImFont* rf=f?f:ImGui::GetFont();
+    float fs=Scale(Config::danmu_font_size);
+    if(rf!=ImGui::GetFont())fs=Config::danmu_font_size*Scale(1.0f);
     for(auto& d:list){
         ImVec2 p(d.x,d.y);
-        dl->AddText(rf,fs,ImVec2(p.x+1,p.y+1),IM_COL32(0,0,0,220),d.text.c_str());
+        dl->AddText(rf,fs,ImVec2(p.x+1,p.y+1),IM_COL32(0,0,0,230),d.text.c_str());
         dl->AddText(rf,fs,p,d.color,d.text.c_str());
     }
 }
@@ -458,55 +466,115 @@ bool GetLatestFrame(std::vector<unsigned char>& out){
 
 namespace AIClient {
 static pthread_t thr=0;static bool run=false;static pthread_mutex_t mtx=PTHREAD_MUTEX_INITIALIZER;static pthread_cond_t cond=PTHREAD_COND_INITIALIZER;static time_t last=0;
-std::string ParseDanmu(const std::string& resp){
+
+static std::string FilterEmoji(const std::string& s){
+    std::string out;out.reserve(s.size());
+    for(size_t i=0;i<s.size();){
+        unsigned char c=(unsigned char)s[i];
+        uint32_t cp=0;int len=0;
+        if(c<0x80){cp=c;len=1;}
+        else if((c&0xE0)==0xC0){cp=c&0x1F;len=2;}
+        else if((c&0xF0)==0xE0){cp=c&0x0F;len=3;}
+        else if((c&0xF8)==0xF0){cp=c&0x07;len=4;}
+        else{i++;continue;}
+        if(i+len>s.size())break;
+        for(int j=1;j<len;j++){
+            if(((unsigned char)s[i+j]&0xC0)!=0x80){cp=0xFFFD;break;}
+            cp=(cp<<6)|((unsigned char)s[i+j]&0x3F);
+        }
+        bool is_emoji=false;
+        if((cp>=0x2600&&cp<=0x27BF)||
+           (cp>=0x1F300&&cp<=0x1F64F)||
+           (cp>=0x1F680&&cp<=0x1F6FF)||
+           (cp>=0x1F900&&cp<=0x1F9FF)||
+           (cp>=0x1F1E0&&cp<=0x1F1FF)||
+           (cp>=0x1F000&&cp<=0x1F02F)||
+           (cp>=0x1F0A0&&cp<=0x1F0FF)||
+           cp==0x200D||
+           (cp>=0xFE00&&cp<=0xFE0F)){
+            is_emoji=true;
+        }
+        if(!is_emoji){
+            for(int j=0;j<len;j++)out+=s[i+j];
+        }
+        i+=len;
+    }
+    return out;
+}
+
+std::vector<std::string> ParseDanmuList(const std::string& resp){
+    std::vector<std::string> res;
     LOGI("Parsing response JSON, length=%d",(int)resp.size());
     try{auto j=nlohmann::json::parse(resp);
-    if(j.contains("error")){LOGE("API returned error: %s",j.dump().c_str());return "";}
+    if(j.contains("error")){LOGE("API returned error: %s",j.dump().c_str());return res;}
     if(j.contains("choices")&&j["choices"].is_array()&&j["choices"].size()>0){auto&c=j["choices"][0];
     std::string finish="";if(c.contains("finish_reason"))finish=c["finish_reason"].get<std::string>();
     LOGI("finish_reason: %s",finish.c_str());
     if(c.contains("message")&&c["message"].contains("content")){std::string s=c["message"]["content"].get<std::string>();
-    LOGI("Raw content from API: '%s' (%d chars)",s.c_str(),(int)s.size());
+    LOGI("Raw content from API (%d chars): '%s'",(int)s.size(),s.c_str());
     if(c["message"].contains("reasoning_content")&&s.empty()){
         std::string r=c["message"]["reasoning_content"].get<std::string>();
-        LOGI("Model is thinking (reasoning), waiting for next request... reasoning length: %d",(int)r.size());
-        return "";
+        LOGI("Model is thinking (reasoning), reasoning length: %d",(int)r.size());
+        return res;
     }
-    size_t a=s.find_first_not_of(" \n\r\t\"'"),b=s.find_last_not_of(" \n\r\t\"'");
-    if(a!=std::string::npos&&b!=std::string::npos)s=s.substr(a,b-a+1);if(s.size()>30)s=s.substr(0,30);
-    LOGI("Parsed danmu text: '%s'",s.c_str());
-    return s;}}
+    s=FilterEmoji(s);
+    std::stringstream ss(s);std::string line;
+    while(std::getline(ss,line,'\n')){
+        size_t a=line.find_first_not_of(" \n\r\t\"'`-*•·.。,，、0123456789)）]】");
+        size_t b=line.find_last_not_of(" \n\r\t\"'`-*•·.。,，、(（[【");
+        if(a!=std::string::npos&&b!=std::string::npos&&b>=a){
+            std::string t=line.substr(a,b-a+1);
+            t=FilterEmoji(t);
+            if(t.size()>=2&&t.size()<=50){
+                res.push_back(t);
+            }
+        }
+    }
+    LOGI("Parsed %d danmu lines",(int)res.size());
+    return res;}}
     else{LOGE("Response missing choices array, keys: %s",j.dump().substr(0,200).c_str());}
     }catch(std::exception& e){LOGE("JSON parse error: %s",e.what());LOGI("Response preview: %s",resp.substr(0,std::min((int)resp.size(),500)).c_str());}catch(...){LOGE("Unknown JSON parse error");LOGI("Response preview: %s",resp.substr(0,std::min((int)resp.size(),500)).c_str());}
-    return"";
+    return res;
 }
 void* Worker(void*){
-    LOGI("AI worker started");
+    LOGI("AI worker started, language: %s, per-request: %d",Config::prompt_lang==0?"Chinese":"English",Config::danmu_per_request);
     while(run){
         {pthread_mutex_lock(&mtx);timespec ts;clock_gettime(CLOCK_REALTIME,&ts);ts.tv_sec+=1;pthread_cond_timedwait(&cond,&mtx,&ts);pthread_mutex_unlock(&mtx);}
         if(!run||!Config::running)continue;time_t now=time(nullptr);if(now-last<Config::capture_interval)continue;last=now;
         if(Config::api_key.empty()&&Config::api_base.find("localhost")==std::string::npos){LOGW("No API key configured");continue;}
         std::vector<unsigned char> jpg;if(!Capture::GetLatestFrame(jpg)||jpg.empty()){LOGW("No frame captured yet");continue;}
-        LOGI("Sending request: %d bytes JPEG to %s (model: %s)", (int)jpg.size(), Config::api_base.c_str(), Config::model_name.c_str());
+        LOGI("Sending request: %d bytes JPEG", (int)jpg.size());
         std::string b64=Base64Encode(jpg.data(),jpg.size());
-        nlohmann::json req;req["model"]=Config::model_name;req["max_tokens"]=300;req["temperature"]=0.9f;
+        nlohmann::json req;req["model"]=Config::model_name;req["max_tokens"]=500;req["temperature"]=1.0f;
         req["stream"]=false;req["enable_thinking"]=false;
         nlohmann::json msgs=nlohmann::json::array();
         nlohmann::json sys;sys["role"]="system";
-        sys["content"]="You are a funny live stream bullet comment commentator. Look at the game screenshot and output EXACTLY ONE short casual comment (max 15 Chinese characters OR 8 English words). IMPORTANT: Output ONLY the comment itself, absolutely NO reasoning, NO thinking, NO explanation, NO quotes, NO extra text. Be humorous or excited.";
+        if(Config::prompt_lang==0){
+            sys["content"]="你是一个Minecraft游戏直播的弹幕AI助手。看这张Minecraft游戏截图，生成"+std::to_string(Config::danmu_per_request)+"条有趣的弹幕评论。规则：1.每条弹幕一行，用换行分隔 2.简短有趣，每条最多15个中文字符 3.像真实直播间观众一样吐槽、惊叹、玩梗 4.描述你看到的MC场景（挖矿/建造/打怪/红石/钻石/苦力怕等）5.不要思考、不要解释、不要加序号和标点符号 6.绝对禁止使用emoji表情符号，只使用纯文字 7.语气激动口语化，比如卧槽、666、神了、寄了之类的";
+        }else{
+            sys["content"]="You are a Minecraft live stream chat commentator. Look at this Minecraft screenshot and generate exactly "+std::to_string(Config::danmu_per_request)+" fun danmaku comments. Rules: 1. One comment per line, separated by newlines 2. Each comment max 8 words, short and exciting 3. React like a real Twitch/YouTube chat viewer 4. Mention what you see: mining, building, creeper, diamond, redstone, mob fight etc. 5. NO reasoning, NO explanation, NO numbers, NO quotes 6. ABSOLUTELY NO emojis, plain text only 7. Use casual gamer slang: LMAO, OP, pog, no way, bruh, rip, gg";
+        }
         msgs.push_back(sys);
         nlohmann::json usr;usr["role"]="user";nlohmann::json ca=nlohmann::json::array();
-        nlohmann::json tp;tp["type"]="text";tp["text"]="One short danmu comment now.";ca.push_back(tp);
+        nlohmann::json tp;tp["type"]="text";
+        tp["text"]=(Config::prompt_lang==0)?"这是Minecraft游戏画面，给我发几条弹幕！":"This is Minecraft gameplay, give me chat comments now!";
+        ca.push_back(tp);
         nlohmann::json ip;ip["type"]="image_url";
         nlohmann::json iurl;iurl["url"]="data:image/jpeg;base64,"+b64;iurl["detail"]="low";
         ip["image_url"]=iurl;ca.push_back(ip);
         usr["content"]=ca;msgs.push_back(usr);req["messages"]=msgs;
         std::string body=req.dump();std::string resp=HttpClient::Request(Config::api_base,"POST",body,Config::api_key);
+        Logger::g_RequestCount++;
         if(resp.empty()){LOGW("Empty response from API");continue;}
         LOGI("API response received (%d bytes)", (int)resp.size());
-        std::string txt=ParseDanmu(resp);
-        if(!txt.empty()){LOGI("Danmu added: '%s' (total: %d)", txt.c_str(),Logger::g_DanmuCount+1);Danmu::Add(txt);Logger::IncDanmu();}
-        else{LOGI("No danmu this round (model thinking or empty)");}
+        auto list=ParseDanmuList(resp);
+        if(!list.empty()){
+            for(auto& t:list){
+                LOGI("Danmu added: '%s'",t.c_str());
+                Danmu::Add(t);
+                Logger::IncDanmu();
+            }
+        }else{LOGI("No danmu this round");}
     }
     LOGI("AI worker stopped");
     return nullptr;
@@ -591,9 +659,13 @@ static void DrawConfigWin(){
     if(!g_FontMsg.empty())ImGui::TextColored(ImVec4(1,0.5f,0.5f,1),"%s",g_FontMsg.c_str());
     ImGui::Spacing();ImGui::Separator();ImGui::Spacing();
     ImGui::TextColored(Primary,"Danmaku Settings");ImGui::Separator();ImGui::Spacing();
-    ImGui::SliderInt("Capture Interval (sec)",&Config::capture_interval,1,30);ImGui::Spacing();
+    const char* langs[]={"Chinese (中文)","English"};
+    ImGui::Combo("Prompt Language",&Config::prompt_lang,langs,2);ImGui::Spacing();
+    ImGui::SliderInt("Capture Interval (sec)",&Config::capture_interval,2,15);ImGui::Spacing();
     ImGui::SliderInt("Max Danmaku Count",&Config::max_danmu_count,10,200);ImGui::Spacing();
-    ImGui::SliderFloat("Danmaku Speed",&Config::danmu_speed,50,400,"%.0f");ImGui::Spacing();
+    ImGui::SliderInt("Danmaku per Request",&Config::danmu_per_request,2,8);ImGui::Spacing();
+    ImGui::SliderFloat("Danmaku Speed",&Config::danmu_speed,80,400,"%.0f");ImGui::Spacing();
+    ImGui::SliderFloat("Danmaku Font Size",&Config::danmu_font_size,16,48,"%.0f px");ImGui::Spacing();
     ImGui::Separator();ImGui::Spacing();
     if(!g_Testing){
         bool can_test=!Config::api_base.empty();
@@ -613,11 +685,14 @@ static void DrawConfigWin(){
     ImGui::Spacing();
     ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0.5f,0.5f,0.8f,1));
     if(ImGui::Button("Test Danmaku (check rendering)",ImVec2(-1,Scale(48)))){
-        Danmu::Add("This is a test danmaku!");
-        Danmu::Add("Hello World!");
-        Danmu::Add("Rendering working correctly");
-        Danmu::Add("Bullet comments are awesome");
-        Danmu::Add("AI will generate more");
+        Danmu::Add("卧槽钻石！");
+        Danmu::Add("666666");
+        Danmu::Add("这波操作6啊");
+        Danmu::Add("苦力怕！快跑！");
+        Danmu::Add("神了这都能挖到");
+        Danmu::Add("寄了寄了");
+        Danmu::Add("Creeper? Aw man");
+        Danmu::Add("主播红石大神");
     }
     ImGui::PopStyleColor();
     ImGui::Spacing();
@@ -754,7 +829,6 @@ static bool DispatchTouch(int a,int id,float x,float y){
     if(a==AMOTION_EVENT_ACTION_DOWN){
         s_islandTouched=on_island;
         if(on_island||on_window){s_touchCaptured=true;HandleTouch(a,id,x,y);return true;}
-        if(g_ShowUI){g_ShowUI=false;}
         s_touchCaptured=false;return false;
     }
     else if(a==AMOTION_EVENT_ACTION_MOVE){
