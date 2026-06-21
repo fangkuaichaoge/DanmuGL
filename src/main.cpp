@@ -38,6 +38,7 @@
 #include "pl/Hook.h"
 #include "pl/Gloss.h"
 #include "ImGui/imgui.h"
+#include "ImGui/imgui_internal.h"
 #include "ImGui/backends/imgui_impl_opengl3.h"
 #include "ImGui/backends/imgui_impl_android.h"
 #include "fonts_data.h"
