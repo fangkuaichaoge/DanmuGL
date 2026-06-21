@@ -184,9 +184,20 @@ ImU32 cols[]={IM_COL32(255,255,255,255),IM_COL32(255,220,100,255),IM_COL32(100,2
 int cc=7;float g_AddDelay=0;int g_LineIndex=0;
 static std::string NormalizeText(const std::string& s){
     std::string out;
-    for(char c : s){
-        if(c==' '||c=='\t'||c=='\n'||c=='\r'||c=='!'||c=='?'||c=='。'||c=='！'||c=='？'||c=='.'||c==','||c=='，')continue;
-        out+=tolower((unsigned char)c);
+    for(size_t i=0;i<s.size();){
+        unsigned char c=(unsigned char)s[i];
+        if(c<0x80){
+            if(c==' '||c=='\t'||c=='\n'||c=='\r'||c=='!'||c=='?'||c=='.'||c==','){i++;continue;}
+            out+=(char)tolower(c);
+            i++;
+        }else{
+            int j=1;
+            if((c&0xE0)==0xC0)j=2;
+            else if((c&0xF0)==0xE0)j=3;
+            else if((c&0xF8)==0xF0)j=4;
+            if(i+j<=s.size())out.append(s.begin()+i,s.begin()+i+j);
+            i+=j;
+        }
     }
     return out;
 }
