@@ -234,21 +234,37 @@ struct Connection {
     }
 };
 
+static std::string DecodeChunked(const std::string& in){
+    std::string out;size_t pos=0;
+    while(pos<in.size()){
+        size_t nl=in.find("\r\n",pos);if(nl==std::string::npos)break;
+        std::string hex=in.substr(pos,nl-pos);
+        while(!hex.empty()&&(hex.back()=='\r'||hex.back()==' '||hex.back()=='\t'))hex.pop_back();
+        if(hex.empty())break;
+        char* end;long sz=strtol(hex.c_str(),&end,16);
+        if(sz<=0)break;
+        pos=nl+2;
+        if(pos+sz>in.size()){out.append(in.substr(pos));break;}
+        out.append(in.substr(pos,(size_t)sz));pos+=sz+2;
+    }
+    return out;
+}
+
 std::string RequestRaw(const std::string& url,const std::string& method,const std::string& body,const std::string& key, const char** err, int* status_code) {
     Url p=ParseUrl(url);
     Connection conn;
     int ret = conn.Connect(p, err);
     if (ret != 0) return "";
     std::ostringstream req;
-    req<<method<<" "<<p.path<<" HTTP/1.1\r\nHost: "<<p.host;
+    req<<method<<" "<<p.path<<" HTTP/1.0\r\nHost: "<<p.host;
     if((!p.https&&p.port!=80)||(p.https&&p.port!=443))req<<":"<<p.port;
     req<<"\r\nContent-Type: application/json\r\nContent-Length: "<<body.size()<<"\r\n";
     if(!key.empty())req<<"Authorization: Bearer "<<key<<"\r\n";
-    req<<"Connection: close\r\n\r\n"<<body;
+    req<<"Accept: application/json\r\nConnection: close\r\n\r\n"<<body;
     std::string rs=req.str();
     if(conn.SendAll(rs.c_str(),rs.size())<=0){conn.Close();if(err)*err="Send failed";return "";}
-    const size_t MAX_RESP = 2*1024*1024;
-    std::string resp;char buf[8192];int n;
+    const size_t MAX_RESP = 4*1024*1024;
+    std::string resp;char buf[16384];int n;
     while((n=conn.RecvSome(buf,sizeof(buf)-1))>0){
         buf[n]=0;resp.append(buf,n);
         if(resp.size()>MAX_RESP){if(err)*err="Response too large";return "";}
@@ -263,9 +279,11 @@ std::string RequestRaw(const std::string& url,const std::string& method,const st
         size_t sp=headers.find(' ');
         if(sp!=std::string::npos){*status_code=atoi(headers.substr(sp+1).c_str());}
     }
+    bool chunked=(headers.find("Transfer-Encoding: chunked")!=std::string::npos||headers.find("transfer-encoding: chunked")!=std::string::npos);
+    if(chunked)body_resp=DecodeChunked(body_resp);
     size_t cl_pos=headers.find("Content-Length:");
     if(cl_pos==std::string::npos)cl_pos=headers.find("content-length:");
-    if(cl_pos!=std::string::npos){
+    if(cl_pos!=std::string::npos&&!chunked){
         size_t start=headers.find_first_of("0123456789",cl_pos);
         size_t end=headers.find("\r\n",start);
         if(start!=std::string::npos&&end!=std::string::npos){
@@ -273,6 +291,8 @@ std::string RequestRaw(const std::string& url,const std::string& method,const st
             if(cl>0&&cl<(long)MAX_RESP&&(long)body_resp.size()>cl)body_resp=body_resp.substr(0,(size_t)cl);
         }
     }
+    size_t endp=body_resp.rfind('}');
+    if(endp!=std::string::npos&&endp+1<body_resp.size())body_resp=body_resp.substr(0,endp+1);
     return body_resp;
 }
 
@@ -363,11 +383,13 @@ std::string ParseDanmu(const std::string& resp){
     return"";
 }
 void* Worker(void*){
+    LOGI("AI worker started");
     while(run){
         {pthread_mutex_lock(&mtx);timespec ts;clock_gettime(CLOCK_REALTIME,&ts);ts.tv_sec+=1;pthread_cond_timedwait(&cond,&mtx,&ts);pthread_mutex_unlock(&mtx);}
         if(!run||!Config::running)continue;time_t now=time(nullptr);if(now-last<Config::capture_interval)continue;last=now;
-        if(Config::api_key.empty()&&Config::api_base.find("localhost")==std::string::npos)continue;
-        std::vector<unsigned char> jpg;if(!Capture::GetLatestFrame(jpg)||jpg.empty())continue;
+        if(Config::api_key.empty()&&Config::api_base.find("localhost")==std::string::npos){LOGW("No API key configured");continue;}
+        std::vector<unsigned char> jpg;if(!Capture::GetLatestFrame(jpg)||jpg.empty()){LOGW("No frame captured yet");continue;}
+        LOGI("Frame captured: %d bytes, sending request to %s", (int)jpg.size(), Config::api_base.c_str());
         std::string b64=Base64Encode(jpg.data(),jpg.size());
         nlohmann::json req;req["model"]=Config::model_name;req["max_tokens"]=50;req["temperature"]=0.8f;
         nlohmann::json msgs=nlohmann::json::array();
@@ -377,8 +399,13 @@ void* Worker(void*){
         nlohmann::json ip;ip["type"]="image_url";ip["image_url"]["url"]="data:image/jpeg;base64,"+b64;ca.push_back(ip);
         usr["content"]=ca;msgs.push_back(usr);req["messages"]=msgs;
         std::string body=req.dump();std::string resp=HttpClient::Request(Config::api_base,"POST",body,Config::api_key);
-        if(!resp.empty()){std::string txt=ParseDanmu(resp);if(!txt.empty())Danmu::Add(txt);}
+        if(resp.empty()){LOGW("Empty response from API");continue;}
+        LOGI("API response received (%d bytes)", (int)resp.size());
+        std::string txt=ParseDanmu(resp);
+        if(!txt.empty()){LOGI("Danmu: %s", txt.c_str());Danmu::Add(txt);}
+        else{LOGW("Failed to parse danmu, response preview: %s", resp.substr(0,std::min((int)resp.size(),200)).c_str());}
     }
+    LOGI("AI worker stopped");
     return nullptr;
 }
 void Start(){if(thr)return;run=true;last=time(nullptr)-Config::capture_interval;pthread_create(&thr,nullptr,Worker,nullptr);}
@@ -481,6 +508,16 @@ static void DrawConfigWin(){
         ImGui::TextColored(ok?ImVec4(0.3f,1,0.4f,1):ImVec4(1,0.5f,0.5f,1),"%s",g_TestResult.c_str());
     }
     ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0.5f,0.5f,0.8f,1));
+    if(ImGui::Button("Test Danmaku (check rendering)",ImVec2(-1,Scale(48)))){
+        Danmu::Add("This is a test danmaku!");
+        Danmu::Add("Hello World!");
+        Danmu::Add("Rendering working correctly");
+        Danmu::Add("Bullet comments are awesome");
+        Danmu::Add("AI will generate more");
+    }
+    ImGui::PopStyleColor();
+    ImGui::Spacing();
     if(ImGui::Button("Save Config",ImVec2(-1,Scale(56))))Config::SaveConfig();ImGui::Spacing();
     if(Config::running){
         ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0.8f,0.3f,0.3f,1));
@@ -556,12 +593,13 @@ static void Setup(){
 }
 
 static void RenderUI(){
-    if(!g_Init)return;GLSt s;SaveGL(s);ImGuiIO&io=ImGui::GetIO();
+    if(!g_Init)return;
+    if(Config::running)Capture::CaptureOnRenderThread();
+    GLSt s;SaveGL(s);ImGuiIO&io=ImGui::GetIO();
     io.DisplaySize=ImVec2((float)g_W,(float)g_H);io.DisplayFramebufferScale=ImVec2(1,1);
     ImGui_ImplOpenGL3_NewFrame();ImGui_ImplAndroid_NewFrame(g_W,g_H);
     ImGui::NewFrame();DrawUI();ImGui::Render();ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     RestoreGL(s);
-    if(Config::running)Capture::CaptureOnRenderThread();
 }
 
 static EGLBoolean(*orig_eglSwapBuffers)(EGLDisplay,EGLSurface)=nullptr;
