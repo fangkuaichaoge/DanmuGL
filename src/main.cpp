@@ -1,4 +1,4 @@
-﻿#include <jni.h>
+﻿﻿#include <jni.h>
 #include <android/input.h>
 #include <android/log.h>
 #include <EGL/egl.h>
@@ -152,7 +152,7 @@ std::vector<unsigned char> Resize(const std::vector<unsigned char>& rgba,int sw,
 }
 
 namespace AIClient {
-static pthread_t thr=0;static bool run=false;static std::mutex mtx;static pthread_cond_t cond=PTHREAD_COND_INITIALIZER;static time_t last=0;
+static pthread_t thr=0;static bool run=false;static pthread_mutex_t mtx=PTHREAD_MUTEX_INITIALIZER;static pthread_cond_t cond=PTHREAD_COND_INITIALIZER;static time_t last=0;
 std::string ParseDanmu(const std::string& resp){
     try{auto j=nlohmann::json::parse(resp);
     if(j.contains("choices")&&j["choices"].is_array()&&j["choices"].size()>0){auto&c=j["choices"][0];
@@ -163,7 +163,7 @@ std::string ParseDanmu(const std::string& resp){
 }
 void* Worker(void*){
     while(run){
-        {std::unique_lock<std::mutex> lk(mtx);timespec ts;clock_gettime(CLOCK_REALTIME,&ts);ts.tv_sec+=1;pthread_cond_timedwait(&cond,&lk.mtx,&ts);}
+        {pthread_mutex_lock(&mtx);timespec ts;clock_gettime(CLOCK_REALTIME,&ts);ts.tv_sec+=1;pthread_cond_timedwait(&cond,&mtx,&ts);pthread_mutex_unlock(&mtx);}
         if(!run||!Config::running)continue;time_t now=time(nullptr);if(now-last<Config::capture_interval)continue;last=now;
         if(Config::api_key.empty()&&Config::api_base.find("localhost")==std::string::npos)continue;
         int w=0,h=0;auto px=Capture::CaptureFrame(w,h);if(px.empty()||w<=0||h<=0)continue;
