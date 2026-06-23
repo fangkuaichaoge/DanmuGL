@@ -1,4 +1,4 @@
-#include <jni.h>
+﻿#include <jni.h>
 #include <android/input.h>
 #include <android/log.h>
 #include <EGL/egl.h>
@@ -165,7 +165,7 @@ bool SaveConfig(){
     j["capture_interval"]=capture_interval;j["max_danmu_count"]=max_danmu_count;j["danmu_per_request"]=danmu_per_request;
     j["danmu_speed"]=danmu_speed;j["danmu_font_size"]=danmu_font_size;j["danmu_opacity"]=danmu_opacity;
     // 格式化温度到两位小数避免精度问题
-    float temp_rounded = roundf(ai_temperature * 100.0f) / 100.0f;
+    float temp_rounded = floor(ai_temperature * 100.0f + 0.5f) / 100.0f;
     j["ai_temperature"]=temp_rounded;j["ai_max_tokens"]=ai_max_tokens;
     j["prompt_lang"]=prompt_lang;j["persona"]=persona;j["running"]=running;
     std::ofstream f(path); if(!f.is_open())return false; f<<j.dump(4); f.close(); return true;
@@ -940,7 +940,6 @@ static void DrawConfigWin(){
     if(ImGui::SliderFloat("Danmaku Opacity",&Config::danmu_opacity,0.1f,1.0f,"%.2f")){need_save=true;save_timer=1.0f;}ImGui::Spacing();
     ImGui::Separator();ImGui::Spacing();
     ImGui::Text("AI Settings");ImGui::Spacing();
-    if(ImGui::SliderFloat("AI Temperature",&Config::ai_temperature,0.0f,1.0f,"%.2f")){need_save=true;save_timer=1.0f;}ImGui::Spacing();
     if(ImGui::SliderInt("AI Max Tokens",&Config::ai_max_tokens,80,800)){need_save=true;save_timer=1.0f;}ImGui::Spacing();
     ImGui::Separator();ImGui::Spacing();
     if(!g_Testing){
