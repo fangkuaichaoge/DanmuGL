@@ -1069,45 +1069,10 @@ static std::string FindSystemFont(){
     for(const char* p : candidates){if(Config::FileExists(p))return std::string(p);}
     return "";
 }
-// 检查文件大小(MB)
+
+// 检查文件大小
 static long GetFileSize(const char* path){
     FILE*f=fopen(path,"rb");if(!f)return -1;fseek(f,0,SEEK_END);long s=ftell(f);fclose(f);return s;
-}
-
-// 健壮的字体加载：多次尝试不同参数
-static ImFont* TryLoadFont(ImFontAtlas* atlas, const char* path, float size, const ImWchar* ranges, const char* name){
-    if(!atlas||!path)return nullptr;
-    ImFontConfig cfg;cfg.FontDataOwnedByAtlas=true;
-    cfg.OversampleH=cfg.OversampleV=1; // 降低采样减少内存
-    cfg.PixelSnapH=true;
-    cfg.SizePixels=size;
-    
-    // 尝试1: 完整范围
-    ImFont* font=atlas->AddFontFromFileTTF(path,size,&cfg,ranges);
-    if(font&&font->Glyphs.size()>0){
-        LOGI("Font '%s' loaded with %d glyphs (size=%.1f)",name,font->Glyphs.size(),size);
-        return font;
-    }
-    if(font){font=nullptr;} // 释放失败的字体
-    
-    // 尝试2: 默认范围(拉丁字符)
-    font=atlas->AddFontFromFileTTF(path,size,&cfg,atlas->GetGlyphRangesDefault());
-    if(font&&font->Glyphs.size()>0){
-        LOGI("Font '%s' loaded with %d glyphs (default ranges)",name,font->Glyphs.size());
-        return font;
-    }
-    if(font){font=nullptr;}
-    
-    // 尝试3: 更小的字体大小
-    cfg.SizePixels=size*0.75f;
-    font=atlas->AddFontFromFileTTF(path,size*0.75f,&cfg,atlas->GetGlyphRangesDefault());
-    if(font&&font->Glyphs.size()>0){
-        LOGI("Font '%s' loaded with %d glyphs (smaller size)",name,font->Glyphs.size());
-        return font;
-    }
-    
-    LOGW("Font '%s' failed all loading attempts",name);
-    return nullptr;
 }
 
 static void Setup(){
@@ -1117,61 +1082,117 @@ static void Setup(){
     g_Dpi=(float)g_H/900.0f;if(g_Dpi<1.0f)g_Dpi=1.0f;if(g_Dpi>2.5f)g_Dpi=2.5f;
     io.Fonts->Clear();
     
-    // 内置字体配置
-    ImFontConfig cfg_mem;cfg_mem.FontDataOwnedByAtlas=false;cfg_mem.OversampleH=cfg_mem.OversampleV=2;cfg_mem.PixelSnapH=true;
+    // 内置字体配置(数据在fonts_data.h中,不需要ImGui管理)
+    ImFontConfig cfg_builtin;cfg_builtin.FontDataOwnedByAtlas=false;
+    cfg_builtin.OversampleH=cfg_builtin.OversampleV=1;cfg_builtin.PixelSnapH=true;
     
-    // 先加载内置字体作为保底
-    g_FontIsland=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(32),&cfg_mem,io.Fonts->GetGlyphRangesDefault());
-    g_UIFont=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(26),&cfg_mem,io.Fonts->GetGlyphRangesDefault());
-    g_DanmuFont=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(32),&cfg_mem,io.Fonts->GetGlyphRangesDefault());
-    g_FontMsg="Built-in font";
-    LOGI("Built-in font loaded as fallback");
+    // 外部字体配置(让ImGui管理数据)
+    ImFontConfig cfg_external;cfg_external.FontDataOwnedByAtlas=true;
+    cfg_external.OversampleH=cfg_external.OversampleV=1;cfg_external.PixelSnapH=true;
     
-    // 尝试加载外部字体(仅当font_type=1时)
-    if(Config::font_type==1&&!Config::font_path.empty()&&Config::FileExists(Config::font_path.c_str())){
-        long fsize=GetFileSize(Config::font_path.c_str());
-        LOGI("External font file size: %.2f MB",fsize/1024.0/1024.0);
+    const ImWchar* ranges_chinese=io.Fonts->GetGlyphRangesChineseFull();
+    const ImWchar* ranges_default=io.Fonts->GetGlyphRangesDefault();
+    
+    // 阶段1: 加载内置字体(保底)
+    LOGI("=== Loading built-in font ===");
+    ImFont* builtin_island=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(32),&cfg_builtin,ranges_default);
+    ImFont* builtin_ui=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(26),&cfg_builtin,ranges_default);
+    ImFont* builtin_danmu=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(32),&cfg_builtin,ranges_default);
+    LOGI("Built-in font: island=%p ui=%p danmu=%p, data_size=%d",builtin_island,builtin_ui,builtin_danmu,(int)inter_medium.size());
+    
+    if(builtin_island&&builtin_ui&&builtin_danmu){
+        g_FontIsland=builtin_island;g_UIFont=builtin_ui;g_DanmuFont=builtin_danmu;
+        g_FontMsg="Built-in font";
+        LOGI("Built-in font OK");
+    }else{
+        LOGE("Built-in font FAILED!");
+    }
+    
+    // 阶段2: 尝试加载外部字体(仅当font_type=1时)
+    if(Config::font_type==1&&!Config::font_path.empty()){
+        LOGI("=== Loading external font ===");
+        LOGI("Font path: %s",Config::font_path.c_str());
         
-        // 文件太大(>5MB)跳过，避免内存问题
-        if(fsize>5*1024*1024){
-            LOGW("Font file too large (%d bytes), skipping",fsize);
-        }else{
-            const ImWchar* ranges=io.Fonts->GetGlyphRangesChineseFull();
-            ImFont*fi=TryLoadFont(io.Fonts,Config::font_path.c_str(),Scale(32),ranges,"Island");
-            ImFont*fu=TryLoadFont(io.Fonts,Config::font_path.c_str(),Scale(26),ranges,"UI");
-            ImFont*fd=TryLoadFont(io.Fonts,Config::font_path.c_str(),Scale(32),ranges,"Danmaku");
+        if(Config::FileExists(Config::font_path.c_str())){
+            long fsize=GetFileSize(Config::font_path.c_str());
+            LOGI("Font file size: %.2f MB (%ld bytes)",fsize/1024.0/1024.0,fsize);
             
-            if(fi&&fu&&fd){
-                g_FontIsland=fi;g_UIFont=fu;g_DanmuFont=fd;
-                g_FontMsg="External font";
-                LOGI("All external fonts loaded successfully");
-            }else{
-                LOGW("External font partial load: fi=%p fu=%p fd=%p, using built-in",fi,fu,fd);
+            // 文件太大警告
+            if(fsize>10*1024*1024){
+                LOGW("Font file >10MB, may cause memory issues!");
             }
+            
+            // 尝试加载中文范围
+            LOGI("Try loading with Chinese range...");
+            ImFont* ext_island=io.Fonts->AddFontFromFileTTF(Config::font_path.c_str(),Scale(32),&cfg_external,ranges_chinese);
+            ImFont* ext_ui=io.Fonts->AddFontFromFileTTF(Config::font_path.c_str(),Scale(26),&cfg_external,ranges_chinese);
+            ImFont* ext_danmu=io.Fonts->AddFontFromFileTTF(Config::font_path.c_str(),Scale(32),&cfg_external,ranges_chinese);
+            LOGI("Chinese range result: island=%p ui=%p danmu=%p",ext_island,ext_ui,ext_danmu);
+            
+            // 检查Glyphs数量
+            if(ext_island)LOGI("Island glyphs: %d",ext_island->Glyphs.size());
+            if(ext_ui)LOGI("UI glyphs: %d",ext_ui->Glyphs.size());
+            if(ext_danmu)LOGI("Danmu glyphs: %d",ext_danmu->Glyphs.size());
+            
+            if(ext_island&&ext_ui&&ext_danmu&&ext_island->Glyphs.size()>0){
+                g_FontIsland=ext_island;g_UIFont=ext_ui;g_DanmuFont=ext_danmu;
+                g_FontMsg="External font";
+                LOGI("External font loaded OK with Chinese range");
+            }else{
+                // 尝试使用默认范围(仅拉丁字符)
+                LOGW("Chinese range failed, trying default range...");
+                ext_island=io.Fonts->AddFontFromFileTTF(Config::font_path.c_str(),Scale(32),&cfg_external,ranges_default);
+                ext_ui=io.Fonts->AddFontFromFileTTF(Config::font_path.c_str(),Scale(26),&cfg_external,ranges_default);
+                ext_danmu=io.Fonts->AddFontFromFileTTF(Config::font_path.c_str(),Scale(32),&cfg_external,ranges_default);
+                LOGI("Default range result: island=%p ui=%p danmu=%p",ext_island,ext_ui,ext_danmu);
+                
+                if(ext_island)LOGI("Island glyphs (default): %d",ext_island->Glyphs.size());
+                
+                if(ext_island&&ext_ui&&ext_danmu&&ext_island->Glyphs.size()>0){
+                    g_FontIsland=ext_island;g_UIFont=ext_ui;g_DanmuFont=ext_danmu;
+                    g_FontMsg="External font (Latin only)";
+                    LOGI("External font loaded with default range");
+                }else{
+                    LOGE("External font completely FAILED! Using built-in");
+                    g_FontMsg="Built-in (external failed)";
+                }
+            }
+        }else{
+            LOGE("Font file NOT FOUND: %s",Config::font_path.c_str());
+            g_FontMsg="Built-in (file missing)";
         }
     }
     
-    // 构建字体纹理
-    LOGI("Building font atlas...");
+    // 阶段3: 构建字体纹理
+    LOGI("=== Building font atlas ===");
     io.Fonts->Build();
+    unsigned char*tex=nullptr;int tex_w=0,tex_h=0;
+    io.Fonts->GetTexDataAsRGBA32(&tex,&tex_w,&tex_h);
+    LOGI("Font atlas: %dx%d pixels, %d bytes",tex_w,tex_h,tex_w*tex_h*4);
     
-    // 验证字体有效
+    // 阶段4: 最终验证
+    LOGI("=== Final verification ===");
+    LOGI("g_FontIsland=%p g_UIFont=%p g_DanmuFont=%p",g_FontIsland,g_UIFont,g_DanmuFont);
+    
     if(!g_UIFont||g_UIFont->Glyphs.size()==0){
-        LOGE("UIFont is invalid! Rebuilding...");
+        LOGE("CRITICAL: No valid font! Creating emergency font");
         io.Fonts->Clear();
-        g_FontIsland=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(32),&cfg_mem,io.Fonts->GetGlyphRangesDefault());
-        g_UIFont=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(26),&cfg_mem,io.Fonts->GetGlyphRangesDefault());
-        g_DanmuFont=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(32),&cfg_mem,io.Fonts->GetGlyphRangesDefault());
+        g_FontIsland=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(32),&cfg_builtin,ranges_default);
+        g_UIFont=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(26),&cfg_builtin,ranges_default);
+        g_DanmuFont=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(32),&cfg_builtin,ranges_default);
         io.Fonts->Build();
-        g_FontMsg="Emergency built-in font";
+        g_FontMsg="Emergency font";
+        LOGI("Emergency font created");
     }
     
     if(g_UIFont)io.FontDefault=g_UIFont;
+    LOGI("Font default set: %p",io.FontDefault);
+    
     ImGui_ImplAndroid_Init(nullptr);ImGui_ImplOpenGL3_Init("#version 300 es");
     Logger::Init();
     SetupStyle();g_Init=true;g_LastT=ImGui::GetTime();
     if(Config::running)AIClient::Start();
-    LOGI("DanmuGL setup complete, DPI: %.2f, Font: %s", g_Dpi, g_FontMsg.c_str());
+    LOGI("=== Setup complete === DPI=%.2f Font='%s'", g_Dpi, g_FontMsg.c_str());
 }
 
 static void RenderUI(){
