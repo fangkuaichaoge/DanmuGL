@@ -1086,21 +1086,24 @@ static void Setup(){
     ImFontConfig cfg;cfg.FontDataOwnedByAtlas=false;
     cfg.OversampleH=cfg.OversampleV=1;
     
-    const ImWchar* ranges=io.Fonts->GetGlyphRangesChineseFull();
+    // 内置字体用默认字符集(可能不含中文)
+    const ImWchar* ranges_default=io.Fonts->GetGlyphRangesDefault();
+    // 外部字体用中文全字符集
+    const ImWchar* ranges_chinese=io.Fonts->GetGlyphRangesChineseFull();
     
     // 阶段1: 加载内置字体
-    g_FontIsland=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(32),&cfg,ranges);
-    g_UIFont=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(26),&cfg,ranges);
-    g_DanmuFont=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(32),&cfg,ranges);
+    g_FontIsland=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(32),&cfg,ranges_default);
+    g_UIFont=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(26),&cfg,ranges_default);
+    g_DanmuFont=io.Fonts->AddFontFromMemoryTTF((void*)inter_medium.data(),(int)inter_medium.size(),Scale(32),&cfg,ranges_default);
     __android_log_print(ANDROID_LOG_INFO,"DanmuGL","Built-in: i=%p u=%p d=%p",g_FontIsland,g_UIFont,g_DanmuFont);
     
-    // 阶段2: 如果font_type=1,加载外部字体
+    // 阶段2: 如果font_type=1,加载外部字体(带中文)
     if(Config::font_type==1&&!Config::font_path.empty()){
         __android_log_print(ANDROID_LOG_INFO,"DanmuGL","Loading external: %s",Config::font_path.c_str());
         
-        ImFont* f1=io.Fonts->AddFontFromFileTTF(Config::font_path.c_str(),Scale(32),nullptr,ranges);
-        ImFont* f2=io.Fonts->AddFontFromFileTTF(Config::font_path.c_str(),Scale(26),nullptr,ranges);
-        ImFont* f3=io.Fonts->AddFontFromFileTTF(Config::font_path.c_str(),Scale(32),nullptr,ranges);
+        ImFont* f1=io.Fonts->AddFontFromFileTTF(Config::font_path.c_str(),Scale(32),nullptr,ranges_chinese);
+        ImFont* f2=io.Fonts->AddFontFromFileTTF(Config::font_path.c_str(),Scale(26),nullptr,ranges_chinese);
+        ImFont* f3=io.Fonts->AddFontFromFileTTF(Config::font_path.c_str(),Scale(32),nullptr,ranges_chinese);
         
         __android_log_print(ANDROID_LOG_INFO,"DanmuGL","External: f1=%p f2=%p f3=%p",f1,f2,f3);
         
