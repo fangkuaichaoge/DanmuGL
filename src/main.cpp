@@ -1,4 +1,4 @@
-﻿#include <jni.h>
+#include <jni.h>
 #include <android/input.h>
 #include <android/log.h>
 #include <EGL/egl.h>
@@ -142,7 +142,7 @@ const char* CONFIG_PATH_PRIMARY = "/storage/emulated/0/games/DanmuGL/config.json
 const char* CONFIG_PATH_SECONDARY = "/storage/emulated/0/Android/media/com.mojang.minecraftpe/DanmuGL/config.json";
 const char* CONFIG_PATH_THIRD = "/storage/emulated/0/Android/media/org.levimc.launcher/DanmuGL/config.json";
 std::string api_key="",api_base="",model_name="",font_path="";
-int capture_interval=3,max_danmu_count=80,danmu_per_request=8,ai_max_tokens=200; float danmu_speed=200.0f,danmu_font_size=26.0f,danmu_opacity=1.0f,ai_temperature=0.6f; int prompt_lang=1, persona=0; bool running=false;
+int capture_interval=3,max_danmu_count=80,danmu_per_request=8,ai_max_tokens=200; float danmu_speed=200.0f,danmu_font_size=26.0f,danmu_opacity=1.0f,ai_temperature=0.0f; int prompt_lang=1, persona=0; bool running=false;
 const char* current_config_path=nullptr;
 void EnsureConfigDir(){
     system("mkdir -p /storage/emulated/0/games/DanmuGL");
